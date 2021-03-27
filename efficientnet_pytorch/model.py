@@ -152,20 +152,47 @@ class EfficientNet(nn.Module):
         [1] https://arxiv.org/abs/1905.11946 (EfficientNet)
 
     Example:
-        
-        
-        import torch
-        >>> from efficientnet.model import EfficientNet
-        >>> inputs = torch.rand(1, 3, 224, 224)
-        >>> model = EfficientNet.from_pretrained('efficientnet-b0')
-        >>> model.eval()
-        >>> outputs = model(inputs)
+        >> import torch
+        >> from efficientnet.model import EfficientNet
+        >> inputs = torch.rand(1, 3, 224, 224)
+        >> model = EfficientNet.from_pretrained('efficientnet-b0')
+        >> model.eval()
+        >> outputs = model(inputs)
     """
 
     def __init__(self, blocks_args=None, global_params=None):
         super().__init__()
         assert isinstance(blocks_args, list), 'blocks_args should be a list'
         assert len(blocks_args) > 0, 'block args must be greater than 0'
+
+        # blocks_args's default elements
+        # 0:[num_repeat:1, kernel_size:3, stride:[1], expand_ratio:1,
+        #    input_filters:32, output_filters:16, se_ratio:0.25, id_skip:True]
+        # 1:[num_repeat:2, kernel_size:3, stride:[2], expand_ratio:6,
+        #    input_filters:16, output_filters:24, se_ratio:0.25, id_skip:True]
+        # 2:[num_repeat:2, kernel_size:5, stride:[2], expand_ratio:6,
+        #    input_filters:24, output_filters:40, se_ratio:0.25, id_skip:True]
+        # 3:[num_repeat:3, kernel_size:3, stride:[2], expand_ratio:6,
+        #    input_filters:40, output_filters:80, se_ratio:0.25, id_skip:True]
+        # 4:[num_repeat:3, kernel_size:5, stride:[1], expand_ratio:6,
+        #    input_filters:80, output_filters:112, se_ratio:0.25, id_skip:True]
+        # 5:[num_repeat:4, kernel_size:5, stride:[2], expand_ratio:6,
+        #    input_filters:112, output_filters:192, se_ratio:0.25, id_skip:True]
+        # 6:[num_repeat:1, kernel_size:3, stride:[1], expand_ratio:6,
+        #    input_filters:192, output_filters:320, se_ratio:0.25, id_skip:True]
+
+        # effectiveNet_b0's global_params elements
+        # width_coefficient = 1.0,
+        # depth_coefficient = 1.0,
+        # image_size = 224,
+        # dropout_rate = 0.2,
+        # num_classes = 1000,
+        # batch_norm_momentum = 0.99,
+        # batch_norm_epsilon = 1e-3,
+        # drop_connect_rate = 0.2,
+        # depth_divisor = 8,
+        # min_depth = None,
+        # include_top = True,
         self._global_params = global_params
         self._blocks_args = blocks_args
 
@@ -179,9 +206,11 @@ class EfficientNet(nn.Module):
 
         # Stem
         in_channels = 3  # rgb
-        out_channels = round_filters(32, self._global_params)  # number of output channels
-        self._conv_stem = Conv2d(in_channels, out_channels, kernel_size=3, stride=2, bias=False)
-        self._bn0 = nn.BatchNorm2d(num_features=out_channels, momentum=bn_mom, eps=bn_eps)
+        out_channels = round_filters(32, self._global_params) # number of output channels
+        self._conv_stem = Conv2d(in_channels, out_channels,
+                                 kernel_size=3, stride=2, bias=False)
+        self._bn0 = nn.BatchNorm2d(num_features=out_channels,
+                                   momentum=bn_mom, eps=bn_eps)
         image_size = calculate_output_image_size(image_size, 2)
 
         # Build blocks
@@ -196,7 +225,9 @@ class EfficientNet(nn.Module):
             )
 
             # The first block needs to take care of stride and filter size increase.
-            self._blocks.append(MBConvBlock(block_args, self._global_params, image_size=image_size))
+            self._blocks.append(MBConvBlock(block_args,
+                                            self._global_params,
+                                            image_size=image_size))
             image_size = calculate_output_image_size(image_size, block_args.stride)
             if block_args.num_repeat > 1: # modify block_args to keep same output size
                 block_args = block_args._replace(input_filters=block_args.output_filters, stride=1)
@@ -239,16 +270,16 @@ class EfficientNet(nn.Module):
             Dictionary of last intermediate features
             with reduction levels i in [1, 2, 3, 4, 5].
             Example:
-                >>> import torch
-                >>> from efficientnet.model import EfficientNet
-                >>> inputs = torch.rand(1, 3, 224, 224)
-                >>> model = EfficientNet.from_pretrained('efficientnet-b0')
-                >>> endpoints = model.extract_endpoints(inputs)
-                >>> print(endpoints['reduction_1'].shape)  # torch.Size([1, 16, 112, 112])
-                >>> print(endpoints['reduction_2'].shape)  # torch.Size([1, 24, 56, 56])
-                >>> print(endpoints['reduction_3'].shape)  # torch.Size([1, 40, 28, 28])
-                >>> print(endpoints['reduction_4'].shape)  # torch.Size([1, 112, 14, 14])
-                >>> print(endpoints['reduction_5'].shape)  # torch.Size([1, 1280, 7, 7])
+                >> import torch
+                >> from efficientnet.model import EfficientNet
+                >> inputs = torch.rand(1, 3, 224, 224)
+                >> model = EfficientNet.from_pretrained('efficientnet-b0')
+                >> endpoints = model.extract_endpoints(inputs)
+                >> print(endpoints['reduction_1'].shape)  # torch.Size([1, 16, 112, 112])
+                >> print(endpoints['reduction_2'].shape)  # torch.Size([1, 24, 56, 56])
+                >> print(endpoints['reduction_3'].shape)  # torch.Size([1, 40, 28, 28])
+                >> print(endpoints['reduction_4'].shape)  # torch.Size([1, 112, 14, 14])
+                >> print(endpoints['reduction_5'].shape)  # torch.Size([1, 1280, 7, 7])
         """
         endpoints = dict()
 
@@ -337,7 +368,8 @@ class EfficientNet(nn.Module):
             An efficientnet model.
         """
         cls._check_model_name_is_valid(model_name)
-        blocks_args, global_params = get_model_params(model_name, override_params)
+        blocks_args, global_params = get_model_params(model_name,
+                                                      override_params)
         model = cls(blocks_args, global_params)
         model._change_in_channels(in_channels)
         return model
@@ -371,8 +403,11 @@ class EfficientNet(nn.Module):
         Returns:
             A pretrained efficientnet model.
         """
-        model = cls.from_name(model_name, num_classes=num_classes, **override_params)
-        load_pretrained_weights(model, model_name, weights_path=weights_path, load_fc=(num_classes == 1000), advprop=advprop)
+        model = cls.from_name(model_name, num_classes=num_classes,
+                              **override_params)
+        print(model)
+        load_pretrained_weights(model, model_name, weights_path=weights_path,
+                                load_fc=(num_classes == 1000), advprop=advprop)
         model._change_in_channels(in_channels)
         return model
 

@@ -17,7 +17,7 @@ from torch.utils import model_zoo
 
 
 ################################################################################
-### Help functions for model architecture
+# Help functions for model architecture
 ################################################################################
 
 # GlobalParams and BlockArgs: Two namedtuples
@@ -225,8 +225,10 @@ class Conv2dDynamicSamePadding(nn.Conv2d):
     # If o equals i, i = floor((i+p-((k-1)*d+1))/s+1),
     # => p = (i-1)*s+((k-1)*d+1)-i
 
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1, bias=True):
-        super().__init__(in_channels, out_channels, kernel_size, stride, 0, dilation, groups, bias)
+    def __init__(self, in_channels, out_channels, kernel_size,
+                 stride=1, dilation=1, groups=1, bias=True):
+        super().__init__(in_channels, out_channels, kernel_size,
+                         stride, 0, dilation, groups, bias)
         self.stride = self.stride if len(self.stride) == 2 else [self.stride[0]] * 2
 
     def forward(self, x):
@@ -459,7 +461,7 @@ def efficientnet_params(model_name):
         params_dict[model_name]: A (width,depth,res,dropout) tuple.
     """
     params_dict = {
-        # Coefficients:   width,depth,res,dropout
+        # Coefficients:   width,depth,resolution,dropout
         'efficientnet-b0': (1.0, 1.0, 224, 0.2),
         'efficientnet-b1': (1.0, 1.1, 240, 0.2),
         'efficientnet-b2': (1.1, 1.2, 260, 0.3),
@@ -474,8 +476,9 @@ def efficientnet_params(model_name):
     return params_dict[model_name]
 
 
-def efficientnet(width_coefficient=None, depth_coefficient=None, image_size=None,
-                 dropout_rate=0.2, drop_connect_rate=0.2, num_classes=1000, include_top=True):
+def efficientnet(width_coefficient=None, depth_coefficient=None,
+                 image_size=None, dropout_rate=0.2, drop_connect_rate=0.2,
+                 num_classes=1000, include_top=True):
     """Create BlockArgs and GlobalParams for efficientnet model.
 
     Args:
@@ -485,7 +488,7 @@ def efficientnet(width_coefficient=None, depth_coefficient=None, image_size=None
         dropout_rate (float)
         drop_connect_rate (float)
         num_classes (int)
-
+        include_top (bool)
         Meaning as the name suggests.
 
     Returns:
@@ -493,7 +496,11 @@ def efficientnet(width_coefficient=None, depth_coefficient=None, image_size=None
     """
 
     # Blocks args for the whole model(efficientnet-b0 by default)
-    # It will be modified in the construction of EfficientNet Class according to model
+    # It will be modified in the construction of EfficientNet Class
+    # according to model
+    # blocks_args:
+    #   num_repeat, kernel_size, stride, expand_ratio, input_filters,
+    #   output_filters, se_ratio, id_skip
     blocks_args = [
         'r1_k3_s11_e1_i32_o16_se0.25',
         'r2_k3_s22_e6_i16_o24_se0.25',
@@ -503,14 +510,28 @@ def efficientnet(width_coefficient=None, depth_coefficient=None, image_size=None
         'r4_k5_s22_e6_i112_o192_se0.25',
         'r1_k3_s11_e6_i192_o320_se0.25',
     ]
-    blocks_args = BlockDecoder.decode(blocks_args)
 
+    # blocks_args' element
+    # 0: [num_repeat:1, kernel_size:3, stride:[1], expand_ratio:1,
+    #     input_filters:32, output_filters:16, se_ratio:0.25, id_skip:True]
+    # 1: [num_repeat:2, kernel_size:3, stride:[2], expand_ratio:6,
+    #     input_filters:16, output_filters:24, se_ratio:0.25, id_skip:True]
+    # 2: [num_repeat:2, kernel_size:5, stride:[2], expand_ratio:6,
+    #     input_filters:24, output_filters:40, se_ratio:0.25, id_skip:True]
+    # 3: [num_repeat:3, kernel_size:3, stride:[2], expand_ratio:6,
+    #     input_filters:40, output_filters:80, se_ratio:0.25, id_skip:True]
+    # 4: [num_repeat:3, kernel_size:5, stride:[1], expand_ratio:6,
+    #     input_filters:80, output_filters:112, se_ratio:0.25, id_skip:True]
+    # 5: [num_repeat:4, kernel_size:5, stride:[2], expand_ratio:6,
+    #     input_filters:112, output_filters:192, se_ratio:0.25, id_skip:True]
+    # 6: [num_repeat:1, kernel_size:3, stride:[1], expand_ratio:6,
+    #     input_filters:192, output_filters:320, se_ratio:0.25, id_skip:True]
+    blocks_args = BlockDecoder.decode(blocks_args)
     global_params = GlobalParams(
         width_coefficient=width_coefficient,
         depth_coefficient=depth_coefficient,
         image_size=image_size,
         dropout_rate=dropout_rate,
-
         num_classes=num_classes,
         batch_norm_momentum=0.99,
         batch_norm_epsilon=1e-3,
@@ -534,20 +555,27 @@ def get_model_params(model_name, override_params):
         blocks_args, global_params
     """
     if model_name.startswith('efficientnet'):
+        # Default:
+        # efficientNet_b0: (1.0,   1.0,   224,        0.2)
+        # Corresponding to (width, depth, resolution, dropout)
         w, d, s, p = efficientnet_params(model_name)
         # note: all models have drop connect rate = 0.2
-        blocks_args, global_params = efficientnet(
-            width_coefficient=w, depth_coefficient=d, dropout_rate=p, image_size=s)
+        blocks_args, global_params = efficientnet(width_coefficient=w,
+                                                  depth_coefficient=d,
+                                                  image_size=s,
+                                                  dropout_rate=p)
     else:
         raise NotImplementedError('model name is not pre-defined: {}'.format(model_name))
     if override_params:
-        # ValueError will be raised here if override_params has fields not included in global_params.
+        # ValueError will be raised here
+        # if override_params has fields not included in global_params.
         global_params = global_params._replace(**override_params)
     return blocks_args, global_params
 
 
 # train with Standard methods
-# check more details in paper(EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks)
+# check more details in paper
+# (EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks)
 url_map = {
     'efficientnet-b0': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b0-355c32eb.pth',
     'efficientnet-b1': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b1-f1951068.pth',
